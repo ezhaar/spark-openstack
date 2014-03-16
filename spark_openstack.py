@@ -158,11 +158,16 @@ def launch_cluster(opts):
     dest = "/home/hduser/DataAnalysis/hadoop/etc/hadoop/slaves"
     scp(floating_ip, username, tmpFile, dest)
 
+# move startup file to master
+    tmpFile = "helpers/utilities/configure_cluster.sh"
+    dest = "/home/hduser/"
+    scp(floating_ip, username, tmpFile, dest)
+
     print("\n")
     print("*********** All Slaves Created *************")
     print("*********** Slaves file Copied to Master *************")
     print("*********** Check that all slaves are RUNNING *************")
-    print("*********** Login to Master and run start_all.sh *************")
+    print("*********** Login to Master and run configure_cluster.sh *********")
     print("\n")
     print("Login to Master as: ssh -l hduser  " + floating_ip)
 
