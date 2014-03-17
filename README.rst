@@ -2,10 +2,17 @@
 Setup a Spark Cluster with Hadoop and YARN.
 ===========================================
 
+PreReq
+------
+Use the scripts in https://www.github.com/ezhaar/spark-installer to install
+hadoop, yarn and spark. Make sure you save a snapshot of the image in OpenStack 
+
 Get Help
 --------
-spark-openstack -h
+./spark-openstack -h
 
-Example
--------
-./spark-openstack --keyname myKey --slaves 2 -c clusterName --flavor m1.large
+Usage
+-----
+./spark-openstack --keyname myKey --slaves 2 --flavor m1.large --image
+spark090-img --cluster_name clusterName
+
