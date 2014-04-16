@@ -35,7 +35,7 @@ try:
     from helpers.find_vm import getVMByName
     from helpers.find_vm import getVMById
 except ImportError as e:
-    print("Could not import helpers, MayDay MayDay")
+    print("Could not import helpers, MayDay MayDay...")
     sys.exit(1)
 
 
@@ -69,12 +69,11 @@ def parse_arguments():
 
     args = parser.parse_args()
 
-# TODO: add-slaves, destroy cluster
-# Verify arguments
+    # Verify arguments
     #check if clusterName already taken
     args = checkArgs(args)
-# If args verified and there were no errors
-# set variables
+    # If args verified and there were no errors
+    # set variables
     if args.dryrun:
         print("\n")
         print("Cluster Name: " + str(args.cluster_name))
@@ -89,76 +88,100 @@ def parse_arguments():
     return args
 
 
+# TODO: destroy cluster
+#def destroy_cluster(opts):
+
+
 def launch_cluster(opts):
 
+    # username defined in the vm image
     username = "hduser"
+
+    # unique hash to identify the cluster
     hash = hashlib.sha1(str(datetime.now())).hexdigest()
+
+    # set metadata for master
     meta = {'master': hash}
+
     master_name = "master-" + opts.cluster_name
-# Boot Master
+
+    # Boot Master
     master = bootVM(opts.image, opts.flavor, opts.keyname,
                     master_name, meta)
     master_id = master.id
+
     print("Booting Master, Please wait... ")
     while master.status == 'BUILD':
         sleep(5)
-        #re get master to refresh status
+        # re get master to refresh status
         master = getVMById(master_id)
 
     master_private_ip = master.networks['private'][0]
-
-# Assign Floating IP to Master
     print("Master booted with private ip: " + str(master_private_ip))
     print("Assigning Floating ip")
+
+    # Assign Floating IP to Master
     floating_ip = addFloatingIP(master)
     print("Floating IP assigned: " + floating_ip)
 
-# Test ssh
+    # Test ssh
     print("Testing SSH, please wait...")
 
-#TODO: iz add ssh backoff
+    #TODO: iz add ssh backoff
     sleep(60)
-    ssh_status = test_ssh(floating_ip, username, True)
-    print(ssh_status)
-    print("ssh test done, hostkey added to known_hosts")
+
+    try:
+        # test ssh and add masters hostkey to known_hosts file
+        ssh_status = test_ssh(floating_ip, username, True)
+        print(ssh_status)
+        print("ssh test done, hostkey added to known_hosts")
+
+    except:
+        print("ERROR: could not ssh into master, exiting...")
+        sys.exit(0)
+
+    # get masters public key and register in nova
     master_keyname = master_key(floating_ip, username, master_name,
                                 opts.verbose)
 
     print("\n")
     print("********" + master_keyname + " registered in nova **********")
 
-# Now create the requested number of slaves
+    # Now create the requested number of slaves with masters public key
     meta = {'slave': hash}
     slave_name = "slave-" + opts.cluster_name
     status = bootVM(opts.image, opts.flavor, master_keyname, slave_name,
                     meta, opts.num_slaves, opts.num_slaves)
-
     print(status)
+
     name = "slave"
+
+    # find all vms whose name contains slave and matches hash
     slaves = getVMByName(name, hash)
+    # get private ips of all slaves booted with hash
     slaves_list = verify_all(slaves)
     print("Got slaves list: " + str(slaves_list))
 
-# Create a file with slave ips
+    # Create a file with master ip
     tmpFile = "/tmp/masters"
     master_file = open(tmpFile, "w")
     master_file.write(master_private_ip + "\n")
 
-# move masters file to master's hadoop conf directory
+    # copy masters file to master's hadoop conf directory
     dest = "/home/hduser/DataAnalysis/hadoop/etc/hadoop/masters"
     scp(floating_ip, username, tmpFile, dest)
 
-# Create a file with slave ips
+    # Create a file with slave ips
     tmpFile = "/tmp/slaves"
     slave_file = open(tmpFile, "w")
     for host in slaves_list:
         slave_file.write(host + "\n")
 
-# move slaves file to master's spark conf directory
+    # copy slaves file to master's hadoop conf directory
     dest = "/home/hduser/DataAnalysis/hadoop/etc/hadoop/slaves"
     scp(floating_ip, username, tmpFile, dest)
 
-# move startup file to master
+    # move startup script to master
     tmpFile = "helpers/utilities/configure_cluster.sh"
     dest = "/home/hduser/"
     scp(floating_ip, username, tmpFile, dest)
