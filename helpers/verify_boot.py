@@ -22,8 +22,8 @@ def verify_all(servers):
         while status == 'BUILD':
             time.sleep(5)
             timeout = timeout + 5
-            if timeout > 600:
-                print("OBS! taking more than 5 minutes...")
+            if timeout > 1200:
+                print("OBS! taking more than 10 minutes...")
                 print("Something is Wrong, debug or contact izhaar@pdc.kth.se")
                 exit()
             # Retrieve the instance again so the status field updates

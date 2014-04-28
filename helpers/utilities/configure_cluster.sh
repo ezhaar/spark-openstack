@@ -1,3 +1,8 @@
+#!/bin/bash
+
+### Configure and start required services ###
+
+
 HOSTNAME=$(hostname)
 IP=$(hostname -I)
 
@@ -5,7 +10,7 @@ echo "$IP $HOSTNAME" | sudo tee -a /etc/hosts
 ssh-keyscan $HOSTNAME | sudo tee -a ~/.ssh/known_hosts
 slaves=$(cat $HADOOP_CONF_DIR/slaves)
 
-
+# set hostname in files
 sed -i "s/XXXX/$HOSTNAME/g" $HADOOP_CONF_DIR/core-site.xml
 #sed -i "s/XXXX/$HOSTNAME/g" $HADOOP_CONF_DIR/yarn-site.xml
 

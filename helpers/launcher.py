@@ -12,7 +12,6 @@ from get_creds import get_nova_creds
 
 def bootVM(image, flavor, keyname, hostname, desc, min_count=1, max_count=1):
     creds = get_nova_creds()
-#    res_id = "af40862d-ebf1-AAAA-a51b-08451ac08338"
     nova = nvClient.Client("1.1", **creds)
     image = nova.images.find(name=image)
     flavor = nova.flavors.find(name=flavor)
@@ -20,7 +19,6 @@ def bootVM(image, flavor, keyname, hostname, desc, min_count=1, max_count=1):
                                    image=image,
                                    flavor=flavor,
                                    meta=desc,
-                                   #reservations_id=res_id,
                                    min_count=min_count,
                                    max_count=max_count,
                                    key_name=keyname)
