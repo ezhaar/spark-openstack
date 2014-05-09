@@ -127,16 +127,27 @@ def launch_cluster(opts):
     # Test ssh
     print("Testing SSH, please wait...")
 
-    #TODO: iz add ssh backoff
-    sleep(60)
+    sleep (60)
+    tries = 0
+    timeout = 30
+    
+    while tries < 6:
+        tries = tries + 1
+        backoff = tries * timeout
+        try:
+            # test ssh and add masters hostkey to known_hosts file
+            ssh_status = test_ssh(floating_ip, username, True)
+            
+        except:
+            print("Waiting another " + str(backoff) + " seconds...")
+            sleep(backoff)
+        else:
+            break
 
-    try:
-        # test ssh and add masters hostkey to known_hosts file
-        ssh_status = test_ssh(floating_ip, username, True)
+    if tries < 6:
         print(ssh_status)
         print("ssh test done, hostkey added to known_hosts")
-
-    except:
+    else:
         print("ERROR: could not ssh into master, exiting...")
         sys.exit(0)
 

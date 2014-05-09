@@ -14,6 +14,9 @@ slaves=$(cat $HADOOP_CONF_DIR/slaves)
 sed -i "s/XXXX/$HOSTNAME/g" $HADOOP_CONF_DIR/core-site.xml
 #sed -i "s/XXXX/$HOSTNAME/g" $HADOOP_CONF_DIR/yarn-site.xml
 
+echo "Waiting for slaves... " 
+
+sleep 60
 
 for slave in $slaves
 do 

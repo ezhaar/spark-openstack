@@ -24,9 +24,16 @@ This script will:
 
 - Copy hadoop, yarn and spark configuration files on all the nodes.
 - Format hadoop's namenode
-- Create start hadoop
+- Start hadoop
 - Create user directories in hdfs
 - Start yarn
 - Start spark master and slaves
+
+Now you should be able to access the web ui:
+
+- http://<master-ip>:50070 for namenode
+- http://<master-ip>:50075 for datanode
+- http://<master-ip>:8088 for resource manager
+- http://<mater-ip>:8080 for spark web ui
 
 

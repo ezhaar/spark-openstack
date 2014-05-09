@@ -8,7 +8,7 @@ def scp(vm_ip, remote_username, src, dest, verbose=False):
 
     try:
         dest = remote_username + "@" + vm_ip + ":" + dest
-        print ("copying to " + dest)
+        print ("copying " + src +  " to " + dest)
         out = Popen(["scp", src, dest],
                     stdout=PIPE,
                     stderr=PIPE)
@@ -21,6 +21,3 @@ def scp(vm_ip, remote_username, src, dest, verbose=False):
     except:
         print("Unknown error Occured")
         raise
-
-if __name__ == "__main__":
-    scp("130.237.221.238", "ubuntu", "/tmp/slaves", "/home/ubuntu")
