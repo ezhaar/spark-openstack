@@ -29,6 +29,3 @@ def master_key(master_ip, username, cluster_name, verbose):
         print("Unknown error Occured")
         raise
 
-
-if __name__ == "__main__":
-    print(master_key("130.237.221.231", "ubuntu", "cluster2",  True))

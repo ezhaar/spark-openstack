@@ -30,6 +30,3 @@ def test_ssh(master_ip, username, verbose):
         print("Unknown error Occured")
         raise
 
-
-if __name__ == "__main__":
-    print(test_ssh("130.237.221.231", "ubuntu",  True))

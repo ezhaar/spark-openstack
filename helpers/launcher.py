@@ -24,7 +24,3 @@ def bootVM(image, flavor, keyname, hostname, desc, min_count=1, max_count=1):
                                    key_name=keyname)
     return instance
 
-if __name__ == "__main__":
-    meta = {'description': 'Slave to cluster1'}
-    out = bootVM("Ubuntu_Precise", "m1.tiny", "iz_jump_host", "testtt",
-                 meta, 1, 1)

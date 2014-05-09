@@ -33,9 +33,11 @@ do
     
 done
 
-#hdfs namenode -format
-#start-dfs.sh
-#start-yarn.sh
+hdfs namenode -format
+start-dfs.sh
+start-yarn.sh
 
-#hdfs dfs -mkdir /user
-#hdfs dfs -mkdir /user/hduser
+hdfs dfs -mkdir /user
+hdfs dfs -mkdir /user/hduser
+
+/home/hduser/DataAnalysis/spark/sbin/start-all.sh

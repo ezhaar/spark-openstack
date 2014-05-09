@@ -16,3 +16,17 @@ Usage
 ./spark-openstack --keyname myKey --slaves 2 --flavor m1.large --image
 spark090-img --cluster_name clusterName
 
+Once all machines have been booted, login to the master and run::
+
+./configure_cluster.sh
+
+This script will:
+
+- Copy hadoop, yarn and spark configuration files on all the nodes.
+- Format hadoop's namenode
+- Create start hadoop
+- Create user directories in hdfs
+- Start yarn
+- Start spark master and slaves
+
+

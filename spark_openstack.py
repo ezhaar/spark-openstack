@@ -44,7 +44,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Create a Spark Cluster on "
                                      "PDC Cloud.", epilog="Example Usage: "
                                      "./spark-openstack launch --keyname "
-                                     "mykey --slaves 5 -c clusterName")
+                                     "mykey --slaves 5 --cluster_name clusterName")
 
     parser.add_argument("-c", "--cluster_name", metavar="",
                         dest="cluster_name",
