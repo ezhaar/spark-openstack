@@ -130,14 +130,14 @@ def launch_cluster(opts):
     sleep (60)
     tries = 0
     timeout = 30
-    
+
     while tries < 6:
         tries = tries + 1
         backoff = tries * timeout
         try:
             # test ssh and add masters hostkey to known_hosts file
             ssh_status = test_ssh(floating_ip, username, True)
-            
+
         except:
             print("Waiting another " + str(backoff) + " seconds...")
             sleep(backoff)
@@ -148,7 +148,7 @@ def launch_cluster(opts):
         print(ssh_status)
         print("ssh test done, hostkey added to known_hosts")
     else:
-        print("ERROR: could not ssh into master, exiting...")
+        print("ERROR: could not ssh into master, MISSION ABORTED...")
         sys.exit(0)
 
     # get masters public key and register in nova
