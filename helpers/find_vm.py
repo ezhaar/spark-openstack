@@ -27,7 +27,9 @@ def getVMByName(name, hash=None):
         if val == hash:
             server_list.append(server)
     return server_list
+
+
 def getVMById(id):
     creds = get_nova_creds()
     nova = nvClient.Client("1.1", **creds)
-    return  nova.servers.get(id)
+    return nova.servers.get(id)

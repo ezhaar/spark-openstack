@@ -44,7 +44,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Create a Spark Cluster on "
                                      "PDC Cloud.", epilog="Example Usage: "
                                      "./spark-openstack launch --keyname "
-                                     "mykey --slaves 5 --cluster_name clusterName")
+                                     "mykey --slaves 5 --cluster_name \
+                                     clusterName")
 
     parser.add_argument("-c", "--cluster_name", metavar="",
                         dest="cluster_name",
@@ -127,7 +128,7 @@ def launch_cluster(opts):
     # Test ssh
     print("Testing SSH, please wait...")
 
-    sleep (60)
+    sleep(60)
     tries = 0
     timeout = 30
 
@@ -193,7 +194,7 @@ def launch_cluster(opts):
     scp(floating_ip, username, tmpFile, dest)
 
     # move startup script to master
-    tmpFile = "helpers/utilities/configure_cluster.sh"
+    tmpFile = "helpers/fabfile.py"
     dest = "/home/hduser/"
     scp(floating_ip, username, tmpFile, dest)
 
@@ -201,7 +202,7 @@ def launch_cluster(opts):
     print("*********** All Slaves Created *************")
     print("*********** Slaves file Copied to Master *************")
     print("*********** Check that all slaves are RUNNING *************")
-    print("*********** Login to Master and run configure_cluster.sh *********")
+    print("*********** Login to Master and run the fabric file *********")
     print("\n")
     print("Login to Master as: ssh -l hduser  " + floating_ip)
 
