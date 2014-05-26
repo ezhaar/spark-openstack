@@ -3,14 +3,16 @@
 
 
 from __future__ import with_statement
-from fabric.api import run, local, parallel, put, env, roles, cd, lcd, task
+from fabric.api import (
+    run, local, parallel, put, env, roles,
+    cd, lcd, task, abort,
+)
 from fabric.tasks import execute
 
 
 # Set the user to use for ssh
 env.user = "hduser"
-env.master = "130.237.221.232"
-
+env.add_unknown_hosts = True
 
 HADOOP_CONF_DIR = '/home/hduser/DataAnalysis/hadoop/etc/hadoop/'
 HADOOP_DATA_DIR = '/home/hduser/data/hadoop/hdfs/'
@@ -26,10 +28,16 @@ env.roledefs = {'slave': slaves}
 
 @task
 @roles('slave')
-@parallel
 def test_conn():
-    #with settings(host_string='hduser@130.237.221.229'):
-    run('hostname -f')
+    try:
+        run('hostname -f')
+    except:
+        abort("All slaves not up yet.. Try again in a moment")
+
+
+@task
+def add_host_keys():
+    local('/home/hduser/hostkeys.sh')
 
 
 @task
@@ -60,39 +68,49 @@ def set_conf_files():
 
 @roles('slave')
 def reset_hdfs_dirs():
+    with lcd('/home/hduser/data/hadoop/hdfs'):
+        local('rm -rf dn nn snn')
+        local('mkdir dn && mkdir nn && mkdir snn')
     with cd(HADOOP_DATA_DIR):
         run('rm -rf dn nn snn')
         run('mkdir dn && mkdir nn && mkdir snn')
 
 
 def format_hdfs():
-    with lcd('/home/hduser/data/hadoop/hdfs'):
-        local('rm -rf dn nn snn')
-        local('mkdir dn && mkdir nn && mkdir snn')
     execute(reset_hdfs_dirs)
     local('hdfs namenode -format')
     local('start-dfs.sh')
     local('hdfs dfs -mkdir /user')
     local('hdfs dfs -mkdir /user/hduser')
-    local('start-yarn.sh')
 
 
 @task
 def init_cluster():
+    execute(test_conn)
+    execute(add_host_keys)
     execute(set_conf_files)
     execute(deploy_conf_files)
     execute(format_hdfs)
+    execute(start_hadoop)
+
+
+@task
+def stop_hadoop():
+    local('stop-dfs.sh')
+    local('stop-yarn.sh')
+
+
+@task
+def start_hadoop():
     local('start-dfs.sh')
     local('start-yarn.sh')
 
 
 @task
 def reset_cluster():
-    local('stop-dfs.sh')
-    local('stop-yarn.sh')
+    execute(add_host_keys)
+    execute(stop_hadoop)
     execute(set_conf_files)
     execute(deploy_conf_files)
     execute(format_hdfs)
-    local('start-dfs.sh')
-    local('start-yarn.sh')
-
+    execute(start_hadoop)

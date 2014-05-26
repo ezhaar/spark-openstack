@@ -198,6 +198,11 @@ def launch_cluster(opts):
     dest = "/home/hduser/"
     scp(floating_ip, username, tmpFile, dest)
 
+    # move startup script to master
+    tmpFile = "helpers/utilities/hostkeys.sh"
+    dest = "/home/hduser/"
+    scp(floating_ip, username, tmpFile, dest)
+
     print("\n")
     print("*********** All Slaves Created *************")
     print("*********** Slaves file Copied to Master *************")
