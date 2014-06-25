@@ -82,6 +82,7 @@ def format_hdfs():
     local('start-dfs.sh')
     local('hdfs dfs -mkdir /user')
     local('hdfs dfs -mkdir /user/hduser')
+    local('stop-dfs.sh')
 
 
 @task
