@@ -18,23 +18,26 @@
 # limitations under the License.
 
 from __future__ import with_statement
-
+from fabric.api import *
+from fabric.contrib.files import exists
 import argparse
 import sys
 import hashlib
 from datetime import datetime
 from time import sleep
 try:
-    from helpers.check_args import checkArgs
+    from helpers.check_args import checkArgs_for_launch
+    from helpers.check_args import checkArgs_for_destroy
     from helpers.launcher import bootVM
+    from helpers.destroy import destroy_cluster
     from helpers.verify_boot import verify_all
     from helpers.scp import scp
-    from helpers.test_ssh import test_ssh
-    from helpers.master_key import master_key
+    from helpers.master_key import register_key
     from helpers.floating_ip import addFloatingIP
     from helpers.find_vm import getVMByName
     from helpers.find_vm import getVMById
 except ImportError as e:
+    raise
     print("Could not import helpers, MayDay MayDay...")
     sys.exit(1)
 
@@ -46,7 +49,7 @@ def parse_arguments():
                                      "./spark-openstack launch --keyname "
                                      "mykey --slaves 5 --cluster_name \
                                      clusterName")
-
+    parser.add_argument('action', help = "launch|destroy")
     parser.add_argument("-c", "--cluster_name", metavar="",
                         dest="cluster_name",
                         action="store",
@@ -55,13 +58,13 @@ def parse_arguments():
                         type=int, action="store",
                         help="Number of slave nodes to spawn.")
     parser.add_argument("-k", "--keyname", metavar="", dest="keyname",
-                        action="store",  # default=defaults.floating_ip,
+                        action="store",
                         help="Your Public Key registered in OpenStack")
     parser.add_argument("-f", "--flavor", metavar="", dest="flavor",
                         action="store", default="m1.medium",
                         help="Size of Virtual Machine")
     parser.add_argument("-i", "--image", metavar="", dest="image",
-                        action="store", default="spark090-img",
+                        action="store", default="spark_1_img",
                         help="Image name to boot from")
     parser.add_argument("-v", "--verbose", dest="verbose",
                         action="store_true", help="verbose output")
@@ -69,23 +72,6 @@ def parse_arguments():
                         action="store_true", help="Dry run")
 
     args = parser.parse_args()
-
-    # Verify arguments
-    #check if clusterName already taken
-    args = checkArgs(args)
-    # If args verified and there were no errors
-    # set variables
-    if args.dryrun:
-        print("\n")
-        print("Cluster Name: " + str(args.cluster_name))
-        print("Number of Slaves: " + str(args.num_slaves))
-        print("Flavor: " + args.flavor)
-        print("Image: " + args.image)
-        print("Pub Key: " + args.keyname)
-        print("\n")
-        sys.exit(0)
-
-    print("Arguments Verified, Now Lanunching Cluster")
     return args
 
 
@@ -120,15 +106,21 @@ def launch_cluster(opts):
     master_private_ip = master.networks['private'][0]
     print("Master booted with private ip: " + str(master_private_ip))
     print("Assigning Floating ip")
-
     # Assign Floating IP to Master
     floating_ip = addFloatingIP(master)
+    env.hosts = [floating_ip]
+    env.user = username
+    sleep(5)
     print("Floating IP assigned: " + floating_ip)
+    floating_ip = '130.237.221.241'
+    with hide('output', 'running', 'warnings'):
+        local('ssh-keygen -R ' + floating_ip)
+        sleep(90)
+        pub_key = local('ssh-keyscan ' + floating_ip)
+        local('echo ' + pub_key + ' tee -a ~/.ssh/known_hosts')
 
     # Test ssh
     print("Testing SSH, please wait...")
-
-    sleep(60)
     tries = 0
     timeout = 30
 
@@ -136,9 +128,9 @@ def launch_cluster(opts):
         tries = tries + 1
         backoff = tries * timeout
         try:
-            # test ssh and add masters hostkey to known_hosts file
-            ssh_status = test_ssh(floating_ip, username, True)
-
+            with settings(host_string=username + "@" + floating_ip), \
+                    hide('output', 'running', 'warnings'):
+                        run('hostname -f')
         except:
             print("Waiting another " + str(backoff) + " seconds...")
             sleep(backoff)
@@ -146,25 +138,33 @@ def launch_cluster(opts):
             break
 
     if tries < 6:
-        print(ssh_status)
         print("ssh test done, hostkey added to known_hosts")
     else:
         print("ERROR: could not ssh into master, MISSION ABORTED...")
         sys.exit(0)
 
     # get masters public key and register in nova
-    master_keyname = master_key(floating_ip, username, master_name,
-                                opts.verbose)
+    with settings(host_string=username + "@" + floating_ip), hide('output',
+                                                                  'running',
+                                                                  'warnings'):
+        #run('ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa -C ' + floating_ip)
+        existing = exists('/home/hduser/.ssh/id_rsa.pub')
+        if existing is False:
+            run("ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa")
+            sleep(2)
+        master_key = run('cat ~/.ssh/id_rsa.pub')
 
+
+    master_keyname = register_key(master_key, opts.cluster_name, opts.verbose)
     print("\n")
     print("********" + master_keyname + " registered in nova **********")
 
-    # Now create the requested number of slaves with masters public key
+    # Now launch the requested number of slaves with masters public key
     meta = {'slave': hash}
     slave_name = "slave-" + opts.cluster_name
     status = bootVM(opts.image, opts.flavor, master_keyname, slave_name,
                     meta, opts.num_slaves, opts.num_slaves)
-    print(status)
+    #print(status)
 
     name = "slave"
 
@@ -175,33 +175,31 @@ def launch_cluster(opts):
     print("Got slaves list: " + str(slaves_list))
 
     # Create a file with master ip
-    tmpFile = "/tmp/masters"
-    master_file = open(tmpFile, "w")
+    mFile = "/tmp/masters"
+    slvFile = "/tmp/slaves"
+    master_file = open(mFile, "w")
     master_file.write(master_private_ip + "\n")
 
-    # copy masters file to master's hadoop conf directory
-    dest = "/home/hduser/DataAnalysis/hadoop/etc/hadoop/masters"
-    scp(floating_ip, username, tmpFile, dest)
-
     # Create a file with slave ips
-    tmpFile = "/tmp/slaves"
-    slave_file = open(tmpFile, "w")
+    slave_file = open(slvFile, "w")
     for host in slaves_list:
         slave_file.write(host + "\n")
+    master_file.close()
+    slave_file.close()
 
-    # copy slaves file to master's hadoop conf directory
-    dest = "/home/hduser/DataAnalysis/hadoop/etc/hadoop/slaves"
-    scp(floating_ip, username, tmpFile, dest)
-
-    # move startup script to master
-    tmpFile = "helpers/fabfile.py"
+    fabFile = "helpers/fabfile.py"
     dest = "/home/hduser/"
-    scp(floating_ip, username, tmpFile, dest)
+    HADOOP_CONF_DIR = "/home/hduser/DataAnalysis/hadoop/etc/hadoop/"
 
-    # move startup script to master
-    tmpFile = "helpers/utilities/hostkeys.sh"
-    dest = "/home/hduser/"
-    scp(floating_ip, username, tmpFile, dest)
+    with settings(host_string=username + "@" + floating_ip), hide('output',
+        'running', 'warnings'):
+
+        put(mFile, HADOOP_CONF_DIR + "masters")
+        # copy slaves file to master's hadoop conf directory
+        put(slvFile, HADOOP_CONF_DIR + "slaves")
+        # move startup script to master
+        put(fabFile, dest)
+
 
     print("\n")
     print("*********** All Slaves Created *************")
@@ -212,6 +210,31 @@ def launch_cluster(opts):
     print("Login to Master as: ssh -l hduser  " + floating_ip)
 
     return (master, slaves)
+
+
 if __name__ == "__main__":
     opts = parse_arguments()
-    (master, slaves) = launch_cluster(opts)
+    if str(opts.action) == 'launch':
+        print("Arguments Verified... preparing launch sequence")
+        args = checkArgs_for_launch(opts)
+        if opts.dryrun:
+            print("\n")
+            print("Action: " + str(args.action))
+            print("Cluster Name: " + str(args.cluster_name))
+            print("Number of Slaves: " + str(args.num_slaves))
+            print("Flavor: " + args.flavor)
+            print("Image: " + args.image)
+            print("Pub Key: " + args.keyname)
+            print("\n")
+            sys.exit(0)
+        else:
+            (master, slaves) = launch_cluster(opts)
+
+    elif opts.action == 'destroy':
+        master = checkArgs_for_destroy(opts)
+        destroy_cluster(master)
+    
+    else:
+        print("Invalid command: " + args.action)
+        print("Please choose from launch or destroy")
+

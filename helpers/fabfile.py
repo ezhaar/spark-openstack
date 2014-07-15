@@ -5,14 +5,16 @@
 from __future__ import with_statement
 from fabric.api import (
     run, local, parallel, put, env, roles,
-    cd, lcd, task, abort,
+    cd, lcd, task, abort
 )
 from fabric.tasks import execute
+from fabric.contrib.files import exists
 
 
 # Set the user to use for ssh
 env.user = "hduser"
 env.add_unknown_hosts = True
+
 
 HADOOP_CONF_DIR = '/home/hduser/DataAnalysis/hadoop/etc/hadoop/'
 HADOOP_DATA_DIR = '/home/hduser/data/hadoop/hdfs/'
@@ -27,6 +29,7 @@ env.roledefs = {'slave': slaves}
 
 
 @task
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 @roles('slave')
 def test_conn():
     try:
@@ -36,13 +39,22 @@ def test_conn():
 
 
 @task
+@roles('slave')
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 def add_host_keys():
-    local('/home/hduser/hostkeys.sh')
+    ip = run('hostname -i')
+    existing = exists('/home/hduser/.ssh/id_rsa.pub')
+    if existing is False:
+        run("ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa")
+        sleep(2)
+
+    local('ssh-keyscan -H ' + ip + ' >> ~/.ssh/known_hosts')
 
 
 @task
 @roles('slave')
 @parallel
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 def deploy_conf_files():
     put(HADOOP_CONF_DIR + "slaves", HADOOP_CONF_DIR + "slaves")
     put(HADOOP_CONF_DIR + "masters", HADOOP_CONF_DIR + "masters")
@@ -58,6 +70,7 @@ def deploy_conf_files():
 
 
 @task
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 def set_conf_files():
     with lcd(HADOOP_CONF_DIR):
         local('sed -i "s/XXXX/$(hostname)/g" core-site.xml')
@@ -67,6 +80,7 @@ def set_conf_files():
 
 
 @roles('slave')
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 def reset_hdfs_dirs():
     with lcd('/home/hduser/data/hadoop/hdfs'):
         local('rm -rf dn nn snn')
@@ -76,6 +90,7 @@ def reset_hdfs_dirs():
         run('mkdir dn && mkdir nn && mkdir snn')
 
 
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 def format_hdfs():
     execute(reset_hdfs_dirs)
     local('hdfs namenode -format')
@@ -86,6 +101,7 @@ def format_hdfs():
 
 
 @task
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 def init_cluster():
     execute(test_conn)
     execute(add_host_keys)
@@ -96,18 +112,21 @@ def init_cluster():
 
 
 @task
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 def stop_hadoop():
     local('stop-dfs.sh')
     local('stop-yarn.sh')
 
 
 @task
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 def start_hadoop():
     local('start-dfs.sh')
     local('start-yarn.sh')
 
 
 @task
+@with_settings(hide('output', 'running', 'warnings'), warn_only=True)
 def reset_cluster():
     execute(add_host_keys)
     execute(stop_hadoop)

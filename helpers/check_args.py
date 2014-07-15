@@ -4,7 +4,7 @@ from novaclient import client as nvClient
 from get_creds import get_nova_creds
 
 
-def checkArgs(args):
+def checkArgs_for_launch(args):
     try:
         args.flavor = str(args.flavor)
 
@@ -49,9 +49,9 @@ def checkArgs(args):
 
         creds = get_nova_creds()
         nova = nvClient.Client("1.1", **creds)
-#        if not nova.images.findall(name=args.image):
-#            print("Given Image " + args.image + " not found in Nova")
-#            raise ValueError
+        if not nova.images.findall(name=args.image):
+            print("Given Image " + args.image + " not found in Nova")
+            raise ValueError
         if not nova.flavors.findall(name=args.flavor):
             print("Given Flavor " + args.flavor + " not registered in Nova")
             raise ValueError
@@ -69,3 +69,13 @@ def checkArgs(args):
         print(err)
         print("Please recheck your arguments\n")
         sys.exit(0)
+
+
+def checkArgs_for_destroy(args):
+    master = args.cluster_name
+        
+    if master is None:
+        print("Please specify a master for deleting the cluster")
+        sys.exit(0)
+    else:
+        return master
