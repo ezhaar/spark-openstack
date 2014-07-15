@@ -6,19 +6,20 @@ PreReq
 ------
 Use the scripts in https://www.github.com/ezhaar/spark-installer to install
 hadoop, yarn and spark. Make sure you save a snapshot of the image in OpenStack 
+You also need the python module fabric installed.
 
 Get Help
 --------
 ./spark-openstack -h
 
-Usage
------
+Launch Cluster
+--------------
 ./spark-openstack --keyname myKey --slaves 2 --flavor m1.large --image
-spark090-img --cluster_name clusterName
+spark090-img --cluster_name clusterName launch
 
 Once all machines have been booted, login to the master and run::
 
-./configure_cluster.sh
+fab -l
 
 This script will:
 
@@ -36,4 +37,7 @@ Now you should be able to access the web ui:
 - http://<master-ip>:8088 for resource manager
 - http://<mater-ip>:8080 for spark web ui
 
+Destroy Cluster
+---------------
 
+./spark-openstack -c clusterName destroy
