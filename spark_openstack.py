@@ -18,8 +18,12 @@
 # limitations under the License.
 
 from __future__ import with_statement
-from fabric.api import *
-from fabric.contrib.files import exists
+try:
+    from fabric.api import *
+    from fabric.contrib.files import exists
+except ImportError as e:
+    print("Could not import fabric, make sure it is installed")
+    sys.exit(1)
 import argparse
 import sys
 import hashlib
@@ -34,10 +38,9 @@ try:
     from helpers.scp import scp
     from helpers.master_key import register_key
     from helpers.floating_ip import addFloatingIP
-    from helpers.find_vm import getVMByName
+    from helpers.find_vm import getVMByName, getVMById, extract_hash
     from helpers.find_vm import getVMById
 except ImportError as e:
-    raise
     print("Could not import helpers, MayDay MayDay...")
     sys.exit(1)
 
@@ -71,18 +74,96 @@ def parse_arguments():
     parser.add_argument("-D", "--dryrun", dest="dryrun",
                         action="store_true", help="Dry run")
 
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
-# TODO: destroy cluster
-#def destroy_cluster(opts):
-
-
-def launch_cluster(opts):
-
-    # username defined in the vm image
+def launch_cluster(options):
     username = "hduser"
+    print("\n###########################################################\n")
+    print("Booting Master... ")
+    master_vm = boot_master(opts)
+    master_name = master_vm.name
+    print("Master booted, Assigning floating ip... ")
+    floating_ip = addFloatingIP(master_vm)
+    print("Floating IP assigned: " + floating_ip)
+
+    print("\n###########################################################\n")
+    
+    print("Testing SSH, please wait...")
+    ssh_status = test_ssh(username, floating_ip)
+    if ssh_status is False:
+        #TODO: cleanup master and key
+        sys.exit(0)
+    print("ssh successful, Registring keypair... ") 
+    print("\n###########################################################\n")
+
+    # get masters public key
+    master_key = get_key(floating_ip, username)
+    # Register key in nova
+    master_keyname = register_key(master_key, master_name, options.verbose)
+    print("Master's key registered... ")
+    print("\n###########################################################\n")
+    print("Launching Slaves...")
+
+    # Now launch the requested number of slaves with masters public key
+    hash = extract_hash(master_vm)
+    meta = {'slave': hash}
+    slave_name = "slave-" + options.cluster_name
+    status = bootVM(options.image, options.flavor, master_keyname, slave_name,
+                    meta, options.num_slaves, options.num_slaves)
+    name = "slave"
+    # find all vms whose name contains slave and matches hash
+    slaves = getVMByName(name, hash)
+    # get private ips of all slaves booted with hash
+    slaves_list = verify_all(slaves)
+    print("Got slaves list: " + str(slaves_list))
+    print("All VMs finished booting")
+    print("\n###########################################################\n")
+
+    print("Uploading files to master")
+    status = upload_files(master_vm, slaves_list, username, floating_ip)
+    print("\n")
+    print("*********** All Slaves Created *************")
+    print("*********** Slaves file Copied to Master *************")
+    print("*********** Check that all slaves are RUNNING *************")
+    print("*********** Login to Master and run the fabric file *********")
+    print("\n")
+    print("Login to Master as: ssh -l hduser  " + floating_ip)
+
+    return True
+
+
+def upload_files(master_id, slaves_list, username, floating_ip):
+    # Create a file with master ip
+    m_file = "/tmp/masters"
+    slv_file = "/tmp/slaves"
+    master_file = open(m_file, "w")
+    master_private_ip = master_id.networks['private'][0]
+    master_file.write(master_private_ip + "\n")
+
+    # Create a file with slave ips
+    slave_file = open(slv_file, "w")
+    for host in slaves_list:
+        slave_file.write(host + "\n")
+    master_file.close()
+    slave_file.close()
+
+    fab_file = "helpers/fabfile.py"
+    dest = "/home/hduser/"
+    hadoop_conf_dir = "/home/hduser/DataAnalysis/hadoop/etc/hadoop/"
+
+    with settings(host_string=username + "@" + floating_ip), hide('output',
+        'running', 'warnings'):
+
+        put(m_file, hadoop_conf_dir + "masters")
+        # copy slaves file to master's hadoop conf directory
+        put(slv_file, hadoop_conf_dir + "slaves")
+        # move startup script to master
+        put(fab_file, dest)
+    return True
+
+
+def boot_master(options):
 
     # unique hash to identify the cluster
     hash = hashlib.sha1(str(datetime.now())).hexdigest()
@@ -90,37 +171,25 @@ def launch_cluster(opts):
     # set metadata for master
     meta = {'master': hash}
 
-    master_name = "master-" + opts.cluster_name
+    master_name = "master-" + options.cluster_name
 
     # Boot Master
-    master = bootVM(opts.image, opts.flavor, opts.keyname,
+    master_vm = bootVM(options.image, options.flavor, options.keyname,
                     master_name, meta)
-    master_id = master.id
-
-    print("Booting Master, Please wait... ")
-    while master.status == 'BUILD':
+    master_id = master_vm.id
+    while master_vm.status == 'BUILD':
         sleep(5)
         # re get master to refresh status
-        master = getVMById(master_id)
+        master_vm = getVMById(master_id)
+    return master_vm
 
-    master_private_ip = master.networks['private'][0]
-    print("Master booted with private ip: " + str(master_private_ip))
-    print("Assigning Floating ip")
-    # Assign Floating IP to Master
-    floating_ip = addFloatingIP(master)
-    env.hosts = [floating_ip]
-    env.user = username
-    sleep(5)
-    print("Floating IP assigned: " + floating_ip)
-    floating_ip = '130.237.221.241'
+
+def test_ssh(username, floating_ip):
     with hide('output', 'running', 'warnings'):
         local('ssh-keygen -R ' + floating_ip)
-        sleep(90)
-        pub_key = local('ssh-keyscan ' + floating_ip)
-        local('echo ' + pub_key + ' tee -a ~/.ssh/known_hosts')
+    sleep(90)
 
     # Test ssh
-    print("Testing SSH, please wait...")
     tries = 0
     timeout = 30
 
@@ -128,9 +197,9 @@ def launch_cluster(opts):
         tries = tries + 1
         backoff = tries * timeout
         try:
-            with settings(host_string=username + "@" + floating_ip), \
-                    hide('output', 'running', 'warnings'):
-                        run('hostname -f')
+            with settings(host_string=username + "@" + floating_ip),\
+                        hide('output', 'running', 'warnings'):
+                run('hostname -f')
         except:
             print("Waiting another " + str(backoff) + " seconds...")
             sleep(backoff)
@@ -138,12 +207,12 @@ def launch_cluster(opts):
             break
 
     if tries < 6:
-        print("ssh test done, hostkey added to known_hosts")
+        return True
     else:
-        print("ERROR: could not ssh into master, MISSION ABORTED...")
-        sys.exit(0)
+        return False
 
-    # get masters public key and register in nova
+
+def get_key(floating_ip, username):
     with settings(host_string=username + "@" + floating_ip), hide('output',
                                                                   'running',
                                                                   'warnings'):
@@ -153,71 +222,16 @@ def launch_cluster(opts):
             run("ssh-keygen -q -t rsa -N '' -f ~/.ssh/id_rsa")
             sleep(2)
         master_key = run('cat ~/.ssh/id_rsa.pub')
-
-
-    master_keyname = register_key(master_key, opts.cluster_name, opts.verbose)
-    print("\n")
-    print("********" + master_keyname + " registered in nova **********")
-
-    # Now launch the requested number of slaves with masters public key
-    meta = {'slave': hash}
-    slave_name = "slave-" + opts.cluster_name
-    status = bootVM(opts.image, opts.flavor, master_keyname, slave_name,
-                    meta, opts.num_slaves, opts.num_slaves)
-    #print(status)
-
-    name = "slave"
-
-    # find all vms whose name contains slave and matches hash
-    slaves = getVMByName(name, hash)
-    # get private ips of all slaves booted with hash
-    slaves_list = verify_all(slaves)
-    print("Got slaves list: " + str(slaves_list))
-
-    # Create a file with master ip
-    mFile = "/tmp/masters"
-    slvFile = "/tmp/slaves"
-    master_file = open(mFile, "w")
-    master_file.write(master_private_ip + "\n")
-
-    # Create a file with slave ips
-    slave_file = open(slvFile, "w")
-    for host in slaves_list:
-        slave_file.write(host + "\n")
-    master_file.close()
-    slave_file.close()
-
-    fabFile = "helpers/fabfile.py"
-    dest = "/home/hduser/"
-    HADOOP_CONF_DIR = "/home/hduser/DataAnalysis/hadoop/etc/hadoop/"
-
-    with settings(host_string=username + "@" + floating_ip), hide('output',
-        'running', 'warnings'):
-
-        put(mFile, HADOOP_CONF_DIR + "masters")
-        # copy slaves file to master's hadoop conf directory
-        put(slvFile, HADOOP_CONF_DIR + "slaves")
-        # move startup script to master
-        put(fabFile, dest)
-
-
-    print("\n")
-    print("*********** All Slaves Created *************")
-    print("*********** Slaves file Copied to Master *************")
-    print("*********** Check that all slaves are RUNNING *************")
-    print("*********** Login to Master and run the fabric file *********")
-    print("\n")
-    print("Login to Master as: ssh -l hduser  " + floating_ip)
-
-    return (master, slaves)
+    return master_key
 
 
 if __name__ == "__main__":
     opts = parse_arguments()
     if str(opts.action) == 'launch':
-        print("Arguments Verified... preparing launch sequence")
         args = checkArgs_for_launch(opts)
-        if opts.dryrun:
+        print("\n###########################################################\n")
+        print("Arguments Verified... preparing launch sequence")
+        if args.dryrun:
             print("\n")
             print("Action: " + str(args.action))
             print("Cluster Name: " + str(args.cluster_name))
@@ -228,13 +242,13 @@ if __name__ == "__main__":
             print("\n")
             sys.exit(0)
         else:
-            (master, slaves) = launch_cluster(opts)
+            status = launch_cluster(opts)
 
     elif opts.action == 'destroy':
         master = checkArgs_for_destroy(opts)
         destroy_cluster(master)
     
     else:
-        print("Invalid command: " + args.action)
+        print("Invalid command: " + opts.action)
         print("Please choose from launch or destroy")
 

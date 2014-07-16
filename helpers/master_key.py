@@ -5,11 +5,11 @@ from get_creds import get_nova_creds
 from subprocess import Popen, PIPE
 
 
-def register_key(key, cluster_name, verbose):
+def register_key(key, master_name, verbose):
     try:
         creds = get_nova_creds()
         nova = nvClient.Client("1.1", **creds)
-        key_name = cluster_name + "-key"
+        key_name = master_name
         nova.keypairs.create(name=key_name, public_key=key)
         return key_name
     except (ValueError, OSError) as err:
@@ -21,3 +21,10 @@ def register_key(key, cluster_name, verbose):
         print("Unknown error Occured")
         raise
 
+def delete_key(master_name):
+    try:
+        creds = get_nova_creds()
+        nova = nvClient.Client("1.1", **creds)
+        nova.keypairs.delete(master_name)
+    except:
+        print("Could not find or delete keypair: " + master_name)

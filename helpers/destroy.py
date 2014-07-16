@@ -10,7 +10,7 @@ except ImportError:
 from verify_boot import verify_all
 from find_vm import getVMByName, extract_hash
 from get_creds import get_nova_creds
-
+from master_key import delete_key
 
 def destroy_cluster(master):
     creds = get_nova_creds()
@@ -34,5 +34,6 @@ def destroy_cluster(master):
             for slave in slaves:
                 slave.delete()
             master_id.delete()
+            delete_key(master)
     except:
         print("ERROR: MasterNotFound")
