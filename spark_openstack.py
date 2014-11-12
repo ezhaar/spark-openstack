@@ -17,7 +17,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from __future__ import with_statement
+import sys
 try:
     from fabric.api import *
     from fabric.contrib.files import exists
@@ -25,7 +27,6 @@ except ImportError as e:
     print("Could not import fabric, make sure it is installed")
     sys.exit(1)
 import argparse
-import sys
 import hashlib
 from datetime import datetime
 from time import sleep
@@ -52,7 +53,7 @@ def parse_arguments():
                                      "./spark-openstack launch --keyname "
                                      "mykey --slaves 5 --cluster_name \
                                      clusterName")
-    parser.add_argument('action', help = "launch|destroy")
+    parser.add_argument('action', help = "launch|destroy|add-nodes")
     parser.add_argument("-c", "--cluster_name", metavar="",
                         dest="cluster_name",
                         action="store",
@@ -67,7 +68,7 @@ def parse_arguments():
                         action="store", default="m1.medium",
                         help="Size of Virtual Machine")
     parser.add_argument("-i", "--image", metavar="", dest="image",
-                        action="store", default="spark_1_img",
+                        action="store", default="spark_101_img",
                         help="Image name to boot from")
     parser.add_argument("-v", "--verbose", dest="verbose",
                         action="store_true", help="verbose output")
@@ -247,6 +248,9 @@ if __name__ == "__main__":
     elif opts.action == 'destroy':
         master = checkArgs_for_destroy(opts)
         destroy_cluster(master)
+    elif opts.action == 'add-nodes':
+        print("\n###########################################################\n")
+        print("Adding more nodes")
     
     else:
         print("Invalid command: " + opts.action)
